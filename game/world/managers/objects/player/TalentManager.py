@@ -5,6 +5,7 @@ from database.dbc.DbcModels import SkillLineAbility
 from database.dbc.DbcDatabaseManager import DbcDatabaseManager
 from network.packet.PacketWriter import PacketWriter, OpCode
 from utils.constants.MiscCodes import TrainerServices, TrainerTypes
+from utils.constants.SpellCodes import SpellTargetMask
 
 TALENT_SKILL_ID = 3
 # Weapon, Attribute, Slayer, Magic, Defensive
@@ -24,6 +25,19 @@ class TalentManager(object):
         # so we assume each rank cost 5 TP more.
         talent_points_cost: int = 10 + ((spell_rank - 1) * 5)
         return talent_points_cost
+
+    def apply_talent_auras(self):
+        skill_line_abilities: list[SkillLineAbility] = DbcDatabaseManager.skill_line_ability_get_by_skill_lines(
+            SKILL_LINE_TALENT_IDS)
+
+        for ability in skill_line_abilities:
+            if not ability.Spell:
+                continue
+
+            spell = DbcDatabaseManager.SpellHolder.spell_get_by_id(ability.Spell)
+
+            if ability.Spell in self.player_mgr.spell_manager.spells:
+                self.player_mgr.spell_manager.start_spell_cast(spell, self.player_mgr, self.player_mgr, SpellTargetMask.SELF)
 
     def send_talent_list(self):
         next_talent: list[int] = []

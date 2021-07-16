@@ -8,6 +8,7 @@ from game.world.managers.abstractions.Vector import Vector
 from game.world.managers.maps.MapManager import MapManager
 from game.world.managers.objects.ObjectManager import ObjectManager
 from game.world.managers.objects.item.ItemManager import ItemManager
+from game.world.managers.objects.player.StatManager import UnitStats
 from game.world.managers.objects.spell.SpellEffect import SpellEffect
 from network.packet.PacketWriter import PacketWriter
 from utils.constants.MiscCodes import AttackTypes, ObjectTypes
@@ -51,7 +52,7 @@ class CastingSpell(object):
         self.cast_end_timestamp = self.get_base_cast_time()/1000 + time.time()
         self.caster_effective_level = self.calculate_effective_level(self.spell_caster.level)
 
-        self.spell_attack_type = AttackTypes.RANGED_ATTACK if self.is_ranged() else AttackTypes.BASE_ATTACK
+        self.spell_attack_type = -1  # Assigned on cast TODO Next ranged spells
         self.cast_state = SpellState.SPELL_STATE_PREPARING
         self.spell_impact_timestamps = {}
 
@@ -171,18 +172,25 @@ class CastingSpell(object):
     def get_base_cast_time(self):
         if self.is_instant_cast():
             return 0
-        skill = self.spell_caster.skill_manager.get_skill_for_spell_id(self.spell_entry.ID)
+        skill = self.spell_caster.skill_manager.get_skill_value_for_spell_id(self.spell_entry.ID)
         if not skill:
             return self.cast_time_entry.Minimum
 
-        return int(max(self.cast_time_entry.Minimum, self.cast_time_entry.Base + self.cast_time_entry.PerLevel * skill.value))
+        return int(max(self.cast_time_entry.Minimum, self.cast_time_entry.Base + self.cast_time_entry.PerLevel * skill))
 
     def get_resource_cost(self):
-        if self.spell_caster.get_type() == ObjectTypes.TYPE_PLAYER and self.spell_entry.ManaCostPct != 0:
-            return self.spell_caster.base_mana * self.spell_entry.ManaCostPct / 100
+        mana_cost = self.spell_entry.ManaCost
+        power_cost_mod = 0
 
+        if self.spell_caster.get_type() == ObjectTypes.TYPE_PLAYER and self.spell_entry.ManaCostPct != 0:
+            mana_cost = self.spell_caster.base_mana * self.spell_entry.ManaCostPct / 100
+
+        if self.spell_caster.get_type() == ObjectTypes.TYPE_PLAYER:
+            mana_cost = self.spell_caster.stat_manager.apply_bonuses_for_value(mana_cost, UnitStats.SCHOOL_POWER_COST,
+                                                                               misc_value=self.spell_entry.School)
         # ManaCostPerLevel is not used by anything relevant, ignore for now (only 271/4513/7290) TODO
-        return self.spell_entry.ManaCost
+
+        return mana_cost + power_cost_mod
 
     def load_effects(self):
         self.effects = []

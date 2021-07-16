@@ -29,25 +29,24 @@ class SpellEffectHandler(object):
 
     @staticmethod
     def handle_weapon_damage(casting_spell, effect, caster, target):
-        damage_info = caster.calculate_melee_damage(target, casting_spell.spell_attack_type)
-        if not damage_info:
-            return
-        damage = damage_info.total_damage + effect.get_effect_points(casting_spell.caster_effective_level)
+        weapon_damage = caster.calculate_base_attack_damage(casting_spell.spell_attack_type, casting_spell.spell_entry.School,
+                                                            target.creature_type, apply_bonuses=False)  # Bonuses are applied on spell damage
+
+        damage = weapon_damage + effect.get_effect_points(casting_spell.caster_effective_level)
         caster.apply_spell_damage(target, damage, casting_spell)
 
     @staticmethod
     def handle_weapon_damage_plus(casting_spell, effect, caster, target):
-        damage_info = caster.calculate_melee_damage(target, casting_spell.spell_attack_type)
-        if not damage_info:
-            return
-        damage = damage_info.total_damage
+        weapon_damage = caster.calculate_base_attack_damage(casting_spell.spell_attack_type, casting_spell.spell_entry.School,
+                                                            target.creature_type, apply_bonuses=False)  # Bonuses are applied on spell damage
+
         damage_bonus = effect.get_effect_points(casting_spell.caster_effective_level)
 
         if caster.get_type() == ObjectTypes.TYPE_PLAYER and \
                 casting_spell.requires_combo_points():
             damage_bonus *= caster.combo_points
 
-        caster.apply_spell_damage(target, damage + damage_bonus, casting_spell)
+        caster.apply_spell_damage(target, weapon_damage + damage_bonus, casting_spell)
 
     @staticmethod
     def handle_add_combo_points(casting_spell, effect, caster, target):

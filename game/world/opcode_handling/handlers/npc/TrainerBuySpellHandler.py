@@ -32,7 +32,7 @@ class TrainerBuySpellHandler(object):
                     return 0
                 else:
                     world_session.player_mgr.remove_talent_points(talent_cost)
-                    world_session.player_mgr.spell_manager.learn_spell(spell_id)
+                    world_session.player_mgr.spell_manager.learn_spell(spell_id, cast_on_learn=True)
                     world_session.player_mgr.send_update_self(
                         world_session.player_mgr.generate_proper_update_packet(is_self=True),
                         force_inventory_update=False)

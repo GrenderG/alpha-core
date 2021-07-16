@@ -29,9 +29,10 @@ class AuraManager:
         if not can_apply:
             return
 
-        AuraEffectHandler.handle_aura_effect_change(aura, aura.target)
         aura.index = self.get_next_aura_index(aura)
         self.active_auras[aura.index] = aura
+
+        AuraEffectHandler.handle_aura_effect_change(aura, aura.target)
 
         if not aura.passive:
             self.write_aura_to_unit(aura)

@@ -1,3 +1,4 @@
+import random
 import time
 from struct import unpack
 
@@ -16,7 +17,7 @@ from game.world.managers.objects.player.TaxiManager import TaxiManager
 from game.world.managers.objects.player.quest.QuestManager import QuestManager
 from game.world.managers.objects.player.ReputationManager import ReputationManager
 from game.world.managers.objects.player.SkillManager import SkillManager
-from game.world.managers.objects.player.StatManager import StatManager
+from game.world.managers.objects.player.StatManager import StatManager, UnitStats
 from game.world.managers.objects.player.TalentManager import TalentManager
 from game.world.managers.objects.player.TradeManager import TradeManager
 from game.world.opcode_handling.handlers.player.NameQueryHandler import NameQueryHandler
@@ -28,8 +29,8 @@ from utils.constants.DuelCodes import *
 from utils.constants.MiscCodes import ChatFlags, LootTypes
 from utils.constants.MiscCodes import ObjectTypes, ObjectTypeIds, PlayerFlags, WhoPartyStatus, HighGuid, \
     AttackTypes, MoveFlags
-from utils.constants.SpellCodes import ShapeshiftForms
-from utils.constants.UnitCodes import Classes, PowerTypes, Races, Genders, UnitFlags, Teams, SplineFlags
+from utils.constants.SpellCodes import ShapeshiftForms, SpellSchools
+from utils.constants.UnitCodes import Classes, PowerTypes, Races, Genders, UnitFlags, Teams, SplineFlags, CreatureTypes
 from utils.constants.UpdateFields import *
 
 MAX_ACTION_BUTTONS = 120
@@ -932,23 +933,23 @@ class PlayerManager(UnitManager):
 
     def set_str(self, str_):
         self.str = str_
-        self.set_uint32(UnitFields.UNIT_FIELD_STAT0, str_)
+        self.set_int32(UnitFields.UNIT_FIELD_STAT0, str_)
 
     def set_agi(self, agi):
         self.agi = agi
-        self.set_uint32(UnitFields.UNIT_FIELD_STAT1, agi)
+        self.set_int32(UnitFields.UNIT_FIELD_STAT1, agi)
 
     def set_sta(self, sta):
         self.sta = sta
-        self.set_uint32(UnitFields.UNIT_FIELD_STAT2, sta)
+        self.set_int32(UnitFields.UNIT_FIELD_STAT2, sta)
 
     def set_int(self, int_):
         self.int = int_
-        self.set_uint32(UnitFields.UNIT_FIELD_STAT3, int_)
+        self.set_int32(UnitFields.UNIT_FIELD_STAT3, int_)
 
     def set_spi(self, spi):
         self.spi = spi
-        self.set_uint32(UnitFields.UNIT_FIELD_STAT4, spi)
+        self.set_int32(UnitFields.UNIT_FIELD_STAT4, spi)
 
     def add_talent_points(self, talent_points):
         self.talent_points += talent_points
@@ -961,7 +962,7 @@ class PlayerManager(UnitManager):
     def remove_talent_points(self, talent_points):
         self.talent_points -= talent_points
         self.set_uint32(PlayerFields.PLAYER_CHARACTER_POINTS1, self.talent_points)
-    
+
     def remove_skill_points(self, skill_points):
         self.skill_points -= skill_points
         self.set_uint32(PlayerFields.PLAYER_CHARACTER_POINTS2, self.skill_points)
@@ -976,9 +977,10 @@ class PlayerManager(UnitManager):
 
             should_update_health = self.health < self.max_health
             should_update_power = True
-
+            '''
             health_regen = 0
             mana_regen = 0
+            
             if self.player.class_ == Classes.CLASS_DRUID:
                 health_regen = self.spi * 0.11 + 1
                 mana_regen = (self.spi / 5 + 15) / 2
@@ -1003,6 +1005,11 @@ class PlayerManager(UnitManager):
                 mana_regen = (self.spi / 5 + 15) / 2
             elif self.player.class_ == Classes.CLASS_WARRIOR:
                 health_regen = self.spi * 1.26 - 22.6
+            '''
+
+            # Healing aura increases regeneration "by 2 every second", and base points equal to 10. Calculate 2/5 of hp5/mp5.
+            health_regen = self.stat_manager.get_total_stat(UnitStats.HEALTH_REGENERATION_PER_5) * 0.4
+            mana_regen = self.stat_manager.get_total_stat(UnitStats.POWER_REGENERATION_PER_5) * 0.4
 
             # Health
 
@@ -1072,51 +1079,41 @@ class PlayerManager(UnitManager):
             self.last_regen = current_time
 
     # override
-    def calculate_min_max_damage(self, attack_type=0):
-        # TODO: Using Vanilla formula, AP was not present in Alpha
-        weapon = None
-        base_min_dmg, base_max_dmg = unpack('<2H', pack('<I', self.damage))
-        weapon_min_dmg = 0
-        weapon_max_dmg = 0
-        attack_power = 0
-        dual_wield_penalty = 1
+    def calculate_min_max_damage(self, attack_type: AttackTypes, attack_school: SpellSchools, target_creature_type: CreatureTypes):
+        return self.stat_manager.get_base_attack_base_min_max_damage(AttackTypes(attack_type))
 
-        if self.player.class_ == Classes.CLASS_WARRIOR or \
-                self.player.class_ == Classes.CLASS_PALADIN:
-            attack_power = (self.str * 2) + (self.level * 3) - 20
-        elif self.player.class_ == Classes.CLASS_DRUID:
-            attack_power = (self.str * 2) - 20
-        elif self.player.class_ == Classes.CLASS_HUNTER:
-            attack_power = self.str + self.agi + (self.level * 2) - 20
-        elif self.player.class_ == Classes.CLASS_MAGE or \
-                self.player.class_ == Classes.CLASS_PRIEST or \
-                self.player.class_ == Classes.CLASS_WARLOCK:
-            attack_power = self.str - 10
-        elif self.player.class_ == Classes.CLASS_ROGUE:
-            attack_power = self.str + ((self.agi * 2) - 20) + (self.level * 2) - 20
-        elif self.player.class_ == Classes.CLASS_SHAMAN:
-            attack_power = self.str - 10 + ((self.agi * 2) - 20) + (self.level * 2)
+    def calculate_base_attack_damage(self, attack_type: AttackTypes, attack_school: SpellSchools, target_creature_type: CreatureTypes, apply_bonuses=True):
+        rolled_damage = super().calculate_base_attack_damage(attack_type, attack_school, target_creature_type, apply_bonuses)
 
-        if attack_type == AttackTypes.BASE_ATTACK:
-            weapon = self.inventory.get_main_hand()
-            dual_wield_penalty = 1.0
-        elif attack_type == AttackTypes.OFFHAND_ATTACK:
-            weapon = self.inventory.get_offhand()
-            dual_wield_penalty = 0.5
+        if apply_bonuses:
+            subclass = -1
+            if attack_type == AttackTypes.BASE_ATTACK:
+                equipped_weapon = self.inventory.get_main_hand()
+            elif attack_type == AttackTypes.OFFHAND_ATTACK:
+                equipped_weapon = self.inventory.get_offhand()
+            else:
+                equipped_weapon = self.inventory.get_ranged()
+            if equipped_weapon:
+                subclass = equipped_weapon.item_template.subclass
+            rolled_damage = self.stat_manager.apply_bonuses_for_damage(rolled_damage, attack_school, target_creature_type, subclass)
 
-        if weapon:
-            weapon_min_dmg = weapon.item_template.dmg_min1
-            weapon_max_dmg = weapon.item_template.dmg_max1
+        return max(0, rolled_damage)
 
-        # Disarmed
-        if not self.can_use_attack_type(attack_type):
-            weapon_min_dmg = base_min_dmg
-            weapon_max_dmg = base_max_dmg
+    # override
+    def calculate_spell_damage(self, base_damage, spell_school: SpellSchools, target_creature_type: CreatureTypes, spell_attack_type: AttackTypes = -1):
+        subclass = 0
+        if spell_attack_type != -1:
+            if spell_attack_type == AttackTypes.BASE_ATTACK:
+                equipped_weapon = self.inventory.get_main_hand()
+            elif spell_attack_type == AttackTypes.OFFHAND_ATTACK:
+                equipped_weapon = self.inventory.get_offhand()
+            else:
+                equipped_weapon = self.inventory.get_ranged()
 
-        min_damage = (weapon_min_dmg + attack_power / 14) * dual_wield_penalty
-        max_damage = (weapon_max_dmg + attack_power / 14) * dual_wield_penalty
+            if equipped_weapon:
+                subclass = equipped_weapon.item_template.subclass
 
-        return int(min_damage), int(max_damage)
+        return self.stat_manager.apply_bonuses_for_damage(base_damage, spell_school, target_creature_type, subclass)
 
     def generate_rage(self, damage_info, is_player=False):
         # Warriors or Druids in Bear form

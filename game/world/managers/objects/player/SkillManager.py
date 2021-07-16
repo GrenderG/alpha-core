@@ -5,6 +5,7 @@ from typing import NamedTuple
 from database.dbc.DbcDatabaseManager import DbcDatabaseManager
 from database.realm.RealmDatabaseManager import RealmDatabaseManager
 from database.realm.RealmModels import CharacterSkill
+from game.world.managers.objects.player.StatManager import UnitStats
 from network.packet.PacketWriter import PacketWriter
 from utils.constants.MiscCodes import SkillCategories, Languages
 from utils.constants.OpCodes import OpCode
@@ -200,6 +201,7 @@ class SkillManager(object):
     def load_skills(self):
         for skill in RealmDatabaseManager.character_get_skills(self.player_mgr.guid):
             self.skills[skill.skill] = skill
+        self.update_skills_max_value()
         self.build_update()
 
     def load_proficiencies(self):
@@ -262,6 +264,7 @@ class SkillManager(object):
 
         skill = self.skills[skill_id]
         skill.value = current_value
+
         if max_value > 0:
             skill.max = max_value
 
@@ -282,7 +285,14 @@ class SkillManager(object):
             return False
         return self.proficiencies[item_class].item_subclass_mask & (1 << item_subclass) != 0
 
-    def get_skill_for_spell_id(self, spell_id):
+    def get_total_skill_value(self, skill_id):
+        if skill_id not in self.skills:
+            return None
+        skill = self.skills[skill_id]
+        bonus_skill = self.player_mgr.stat_manager.get_total_stat(UnitStats.SKILL, misc_value=skill_id)
+        return skill.value + bonus_skill
+
+    def get_skill_value_for_spell_id(self, spell_id):
         skill_line_ability = DbcDatabaseManager.SkillLineAbilityHolder.skill_line_ability_get_by_spell(spell_id)
         if not skill_line_ability:
             return None
@@ -290,7 +300,7 @@ class SkillManager(object):
         skill_id = skill_line_ability.SkillLine
         if skill_id not in self.skills:
             return None
-        return self.skills[skill_id]
+        return self.get_total_skill_value(skill_id)
 
     @staticmethod
     def get_all_languages():
@@ -327,10 +337,11 @@ class SkillManager(object):
     def build_update(self):
         count = 0
         for skill_id, skill in self.skills.items():
+            total_value = self.get_total_skill_value(skill_id)
             self.player_mgr.set_uint32(PlayerFields.PLAYER_SKILL_INFO_1_1 + (count * 3),
                                        unpack('<I', pack('<2H', skill_id, skill.value))[0])
             self.player_mgr.set_uint32(PlayerFields.PLAYER_SKILL_INFO_1_1 + (count * 3) + 1,
-                                       unpack('<I', pack('<2H', skill.max, 0))[0])  # max_rank, skill_mod
+                                       unpack('<I', pack('<2H', skill.max, total_value - skill.value))[0])  # max_rank, skill_mod
             self.player_mgr.set_uint32(PlayerFields.PLAYER_SKILL_INFO_1_1 + (count * 3) + 2,
                                        unpack('<I', pack('<2H', 0, 0))[0])  # skill_step, padding
             count += 1

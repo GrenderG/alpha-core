@@ -15,8 +15,10 @@ from utils import Formulas
 from utils.Logger import Logger
 from utils.Formulas import UnitFormulas
 from utils.constants.ItemCodes import InventoryTypes, ItemSubClasses
-from utils.constants.MiscCodes import NpcFlags, ObjectTypes, ObjectTypeIds, UnitDynamicTypes, TrainerServices, TrainerTypes
+from utils.constants.MiscCodes import NpcFlags, ObjectTypes, ObjectTypeIds, UnitDynamicTypes, TrainerServices, \
+    TrainerTypes, AttackTypes
 from utils.constants.OpCodes import OpCode
+from utils.constants.SpellCodes import SpellSchools
 from utils.constants.UnitCodes import UnitFlags, WeaponMode, CreatureTypes, MovementTypes, SplineFlags
 from utils.constants.UpdateFields import ObjectFields, UnitFields
 
@@ -465,7 +467,7 @@ class CreatureManager(UnitManager):
         else:
             player.give_xp([Formulas.CreatureFormulas.xp_reward(self.level, player.level, is_elite)], self)
 
-    def calculate_min_max_damage(self, attack_type=0):
+    def calculate_min_max_damage(self, attack_type: AttackTypes, attack_school: SpellSchools, target_creature_type: CreatureTypes):
         min_damage, max_damage = unpack('<2H', pack('<I', self.damage))
         return int(min_damage), int(max_damage)
 

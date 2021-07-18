@@ -27,6 +27,9 @@ class GroupInviteHandler(object):
             elif target_player_mgr and (target_player_mgr.has_pending_group_invite or target_player_mgr.group_manager):
                 GroupManager.send_group_operation_result(world_session.player_mgr, PartyOperations.PARTY_OP_INVITE,
                                                          target_player_mgr.player.name, PartyResults.ERR_ALREADY_IN_GROUP_S)
+            elif target_player_mgr and target_player_mgr.guid == world_session.player_mgr.guid:
+                GroupManager.send_group_operation_result(world_session.player_mgr, PartyOperations.PARTY_OP_INVITE,
+                                                         target_player_mgr.player.name, PartyResults.ERR_INVITE_RESTRICTED)
             else:
                 GroupManager.invite_player(world_session.player_mgr, target_player_mgr)
 

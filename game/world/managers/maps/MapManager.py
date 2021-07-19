@@ -2,7 +2,7 @@ import traceback
 
 from database.dbc.DbcDatabaseManager import DbcDatabaseManager
 from game.world.managers.maps.AreaInformation import AreaInformation
-from game.world.managers.maps.Constants import SIZE, RESOLUTION_ZMAP, RESOLUTION_AREA_INFO
+from game.world.managers.maps.Constants import SIZE, RESOLUTION_ZMAP, RESOLUTION_AREA_INFO, RESOLUTION_LIQUIDS
 from game.world.managers.maps.Map import Map
 from game.world.managers.maps.MapTile import MapTile
 from utils.ConfigManager import config
@@ -122,110 +122,48 @@ class MapManager(object):
                 bottom_height = MapManager._lerp(val_3, val_4, x_normalized)
                 return MapManager._lerp(top_height, bottom_height, y_normalized)  # Z
             except:
-                return MAPS[map_id].tiles[map_tile_x][map_tile_y].z_coords[tile_local_x][tile_local_x]
+                return MAPS[map_id].tiles[map_tile_x][map_tile_y].z_height_map[tile_local_x][tile_local_x]
         except:
             Logger.error(traceback.format_exc())
             return current_z if current_z else 0.0
 
     @staticmethod
-    def get_area_information(world_object):
-        if world_object.map_ not in MAPS:
-            Logger.warning(f'Wrong map, {world_object.map_} not found.')
+    def get_area_information(map_id, x, y):
+        try:
+            if map_id not in MAPS:
+                Logger.warning(f'Wrong map, {map_id} not found.')
+                return None
+
+            map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
+
+            if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
+                return None
+
+            if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
+                return None
+            return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_information[tile_local_x][tile_local_y]
+        except:
+            Logger.error(traceback.format_exc())
             return None
 
-        object_location = world_object.location
-        tile_x = MapManager.get_tile_x(object_location.x)
-        tile_y = MapManager.get_tile_y(object_location.y)
+    @staticmethod
+    def get_liquid_information(map_id, x, y):
+        try:
+            if map_id not in MAPS:
+                Logger.warning(f'Wrong map, {map_id} not found.')
+                return None
 
-        if not MapManager._check_tile_load(world_object.map_, object_location.x, object_location.y, tile_x, tile_y):
+            map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_LIQUIDS - 1)
+
+            if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
+                return None
+
+            if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
+                return None
+            return MAPS[map_id].tiles[map_tile_x][map_tile_y].liquid_information[tile_local_x][tile_local_y]
+        except:
+            Logger.error(traceback.format_exc())
             return None
-
-        area_zone_id = MapManager.get_area_zone_id(world_object.map_, object_location.x, object_location.y)
-        area_number = MapManager.get_area_number(world_object.map_, object_location.x, object_location.y)
-        area_flags = MapManager.get_area_flags(world_object.map_, object_location.x, object_location.y)
-        area_level = MapManager.get_area_level(world_object.map_, object_location.x, object_location.y)
-        area_explore_bit = MapManager.get_area_explore_flag(world_object.map_, object_location.x, object_location.y)
-        area_faction_mask = MapManager.get_area_faction_mask(world_object.map_, object_location.x, object_location.y)
-
-        # If unable to retrieve any of the area information, return None.
-        if area_zone_id < 0 or area_number < 0 or area_flags < 0 or area_level < 0 or area_explore_bit < 0 or area_faction_mask < 0:
-            return None
-
-        return AreaInformation(area_zone_id, area_number, area_flags, area_level, area_explore_bit, area_faction_mask)
-
-    @staticmethod
-    def get_area_zone_id(map_id, x, y):
-        map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
-
-        if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
-            return -1
-
-        if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-            return -1
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_zone_id[tile_local_x][tile_local_y]
-
-    @staticmethod
-    def get_area_number(map_id, x, y):
-        map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
-
-        if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
-            return -1
-
-        if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-            return -1
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_number[tile_local_x][tile_local_y]
-
-    @staticmethod
-    def get_area_flags(map_id, x, y):
-        map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
-
-        if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
-            return -1
-
-        if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-            return -1
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_flags[tile_local_x][tile_local_y]
-
-    @staticmethod
-    def get_area_level(map_id, x, y):
-        map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
-
-        if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
-            return -1
-
-        if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-            return -1
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_level[tile_local_x][tile_local_y]
-
-    @staticmethod
-    def get_area_explore_flag(map_id, x, y):
-        map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
-
-        if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
-            return -1
-
-        if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-            return -1
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_explore_flag[tile_local_x][tile_local_y]
-
-    @staticmethod
-    def get_area_faction_mask(map_id, x, y):
-        map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_AREA_INFO - 1)
-
-        if not MapManager._check_tile_load(map_id, x, y, map_tile_x, map_tile_y):
-            return -1
-
-        if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-            return -1
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].area_faction_mask[tile_local_x][tile_local_y]
-
-    @staticmethod
-    def get_water_level(map_id, x, y):
-        return 0.0  # TODO
-        # map_tile_x, map_tile_y, tile_local_x, tile_local_y = MapManager.calculate_tile(x, y, RESOLUTION_WATER)
-        # if map_id not in MAPS or not MAPS[map_id].tiles[map_tile_x][map_tile_y]:
-        #     return 0.0
-        # return MAPS[map_id].tiles[map_tile_x][map_tile_y].water_level[tile_local_x][tile_local_y]
 
     @staticmethod
     def _check_tile_load(map_id, location_x, location_y, map_tile_x, map_tile_y):
@@ -270,7 +208,7 @@ class MapManager(object):
             map_tile_y = int(map_tile_y - 1)
             map_tile_local_y = int(-map_tile_local_y - 1)
 
-        return MAPS[map_id].tiles[map_tile_x][map_tile_y].z_coords[map_tile_local_x][map_tile_local_y]
+        return MAPS[map_id].tiles[map_tile_x][map_tile_y].z_height_map[map_tile_local_x][map_tile_local_y]
 
     @staticmethod
     def validate_map_coord(coord):

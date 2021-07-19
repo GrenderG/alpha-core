@@ -828,6 +828,19 @@ class ActivateTaxiReplies(IntEnum):
     ERR_TAXINOTSTANDING = 12
 
 
+class MirrorTimerTypes(IntEnum):
+    FATIGUE = 0
+    BREATH = 1
+    FEIGNDEATH = 2
+    ENVIRONMENTAL = 3
+
+
+class MirrorTimerStatus(IntEnum):
+    UNCHANGED = 0
+    FULL_UPDATE = 1
+    STATUS_UPDATE = 2
+
+
 class LogoutResponseCodes(IntEnum):
     LOGOUT_CANCEL = 0
     LOGOUT_PROCEED = 1

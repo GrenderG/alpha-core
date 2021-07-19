@@ -1,27 +1,24 @@
 from os import path
 from struct import unpack
 
-from game.world.managers.maps.Constants import RESOLUTION_ZMAP, RESOLUTION_WATER, RESOLUTION_AREA_INFO
+from game.world.managers.maps.AreaInformation import AreaInformation
+from game.world.managers.maps.Constants import RESOLUTION_ZMAP, RESOLUTION_LIQUIDS, RESOLUTION_AREA_INFO
+from game.world.managers.maps.LiquidInformation import LiquidInformation
 from network.packet.PacketReader import PacketReader
 from utils.Logger import Logger
 from utils.PathManager import PathManager
 
 
 class MapTile(object):
-    EXPECTED_VERSION = 'ACMAP_1.20'
+    EXPECTED_VERSION = 'ACMAP_1.30'
 
     def __init__(self, map_id, tile_x, tile_y):
         self.cell_x = tile_x
         self.cell_y = tile_y
         self.cell_map = map_id
-        self.area_zone_id = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
-        self.area_number = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
-        self.area_flags = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
-        self.area_level = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
-        self.area_explore_flag = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
-        self.area_faction_mask = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
-        self.water_level = [[0 for r in range(0, RESOLUTION_WATER)] for c in range(0, RESOLUTION_WATER)]
-        self.z_coords = [[0 for r in range(0, RESOLUTION_ZMAP)] for c in range(0, RESOLUTION_ZMAP)]
+        self.area_information = [[0 for r in range(0, RESOLUTION_AREA_INFO)] for c in range(0, RESOLUTION_AREA_INFO)]
+        self.liquid_information = [[0 for r in range(0, RESOLUTION_LIQUIDS)] for c in range(0, RESOLUTION_LIQUIDS)]
+        self.z_height_map = [[0 for r in range(0, RESOLUTION_ZMAP)] for c in range(0, RESOLUTION_ZMAP)]
 
         self.load()
 
@@ -42,19 +39,22 @@ class MapTile(object):
                 # Height Map
                 for x in range(0, RESOLUTION_ZMAP):
                     for y in range(0, RESOLUTION_ZMAP):
-                        self.z_coords[x][y] = unpack('<f', map_tiles.read(4))[0]
+                        self.z_height_map[x][y] = unpack('<f', map_tiles.read(4))[0]
 
                 # ZoneID, AreaNumber, AreaFlags, AreaLevel, AreaExploreFlag(Bit), AreaFactionMask
                 for x in range(0, RESOLUTION_AREA_INFO):
                     for y in range(0, RESOLUTION_AREA_INFO):
-                        self.area_zone_id[x][y] = unpack('<I', map_tiles.read(4))[0]
-                        self.area_number[x][y] = unpack('<I', map_tiles.read(4))[0]
-                        self.area_flags[x][y] = unpack('<B', map_tiles.read(1))[0]
-                        self.area_level[x][y] = unpack('<B', map_tiles.read(1))[0]
-                        self.area_explore_flag[x][y] = unpack('<H', map_tiles.read(2))[0]
-                        self.area_faction_mask[x][y] = unpack('<B', map_tiles.read(1))[0]
+                        zone_id = unpack('<I', map_tiles.read(4))[0]
+                        area_number = unpack('<I', map_tiles.read(4))[0]
+                        area_flags = unpack('<B', map_tiles.read(1))[0]
+                        area_level = unpack('<B', map_tiles.read(1))[0]
+                        area_explore_bit = unpack('<H', map_tiles.read(2))[0]
+                        area_faction_mask = unpack('<B', map_tiles.read(1))[0]
+                        self.area_information[x][y] = AreaInformation(zone_id, area_number, area_flags, area_level, area_explore_bit, area_faction_mask)
 
-                # TODO: Liquids
-                # for x in range(0, RESOLUTION_WATER + 1):
-                #     for y in range(0, RESOLUTION_WATER + 1):
-                #         self.water_level[x][y] = unpack('<f', map_tiles.read(4))[0]
+                # Liquids
+                for x in range(0, RESOLUTION_LIQUIDS):
+                    for y in range(0, RESOLUTION_LIQUIDS):
+                        flag = unpack('<B', map_tiles.read(1))[0]
+                        height = unpack('<f', map_tiles.read(4))[0]
+                        self.liquid_information[x][y] = LiquidInformation(flag, height)

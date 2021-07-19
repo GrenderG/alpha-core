@@ -62,7 +62,13 @@ class MovementHandler(object):
                 MapManager.update_object(world_session.player_mgr)
                 world_session.player_mgr.sync_player()
 
-                # Get up if you jump while not standing
+                # Update player swimming state.
+                if world_session.player_mgr.is_swimming() and not world_session.player_mgr.liquid_information:
+                    world_session.player_mgr.update_swimming_state(True)
+                elif not world_session.player_mgr.is_swimming() and world_session.player_mgr.liquid_information:
+                    world_session.player_mgr.update_swimming_state(False)
+
+                # Get up if you jump while not standing.
                 if reader.opcode == OpCode.MSG_MOVE_JUMP and \
                         world_session.player_mgr.stand_state != StandState.UNIT_DEAD and \
                         world_session.player_mgr.stand_state != StandState.UNIT_STANDING:

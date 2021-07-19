@@ -19,6 +19,7 @@ from game.world.managers.objects.player.SkillManager import SkillManager
 from game.world.managers.objects.player.StatManager import StatManager
 from game.world.managers.objects.player.TalentManager import TalentManager
 from game.world.managers.objects.player.TradeManager import TradeManager
+from game.world.managers.objects.timers.MirrorTimersManager import MirrorTimersManager
 from game.world.opcode_handling.handlers.player.NameQueryHandler import NameQueryHandler
 from network.packet.PacketWriter import *
 from network.packet.update.UpdatePacketFactory import UpdatePacketFactory
@@ -96,6 +97,7 @@ class PlayerManager(UnitManager):
         self.pending_taxi_destination = None
         self.explored_areas = bitarray(MAX_EXPLORED_AREAS, 'little')
         self.explored_areas.setall(0)
+        self.liquid_information = None
 
         if self.player:
             self.set_player_variables()
@@ -153,6 +155,7 @@ class PlayerManager(UnitManager):
             self.guild_manager = None
             self.has_pending_group_invite = False
             self.group_manager = None
+            self.mirror_timers_manager = MirrorTimersManager(self)
 
     def get_native_display_id(self, is_male, race_data=None):
         if not race_data:
@@ -379,8 +382,6 @@ class PlayerManager(UnitManager):
             if MapManager.should_relocate(self, self.teleport_destination, map_):
                 self.is_relocating = True
 
-            # TODO: After teleport, popping happens because we are not using the real terrain Z, once we have proper
-            #  maps, we should validate destination Z.
             data = pack(
                 '<Q9fI',
                 self.transport_id,
@@ -757,11 +758,10 @@ class PlayerManager(UnitManager):
 
         # Exploration handling (only if player is not flying).
         if not self.movement_spline or self.movement_spline.flags != SplineFlags.SPLINEFLAG_FLYING:
-            explore_flag = MapManager.get_area_explore_flag(self.map_, self.location.x, self.location.y)
-            # Check if we need to set this zone as explored.
-            if explore_flag >= 0 and not self.has_area_explored(explore_flag):
-                area_information = MapManager.get_area_information(self)
-                if area_information:
+            area_information = MapManager.get_area_information(self.map_, self.location.x, self.location.y)
+            if area_information:
+                # Check if we need to set this zone as explored.
+                if area_information.explore_bit >= 0 and not self.has_area_explored(area_information.explore_bit):
                     self.set_area_explored(area_information)
 
     def has_area_explored(self, area_explore_bit):
@@ -769,12 +769,12 @@ class PlayerManager(UnitManager):
 
     # TODO, Trigger quest explore requirement checks.
     def set_area_explored(self, area_information):
-        self.explored_areas[area_information.area_explore_bit] = True
-        if area_information.area_level > 0:
+        self.explored_areas[area_information.explore_bit] = True
+        if area_information.level > 0:
             if self.level < config.Unit.Player.Defaults.max_level:
                 # The following calculations are taken from VMaNGOS core.
                 xp_rate = int(config.Server.Settings.xp_rate)
-                diff = self.level - area_information.area_level
+                diff = self.level - area_information.level
                 if diff < -5:
                     xp_gain = WorldDatabaseManager.exploration_base_xp_get_by_level(self.level + 5) * xp_rate
                 elif diff > 5:
@@ -783,9 +783,9 @@ class PlayerManager(UnitManager):
                         exploration_percent = 100
                     elif exploration_percent < 0:
                         exploration_percent = 0
-                    xp_gain = WorldDatabaseManager.exploration_base_xp_get_by_level(area_information.area_level) * exploration_percent / 100 * xp_rate
+                    xp_gain = WorldDatabaseManager.exploration_base_xp_get_by_level(area_information.level) * exploration_percent / 100 * xp_rate
                 else:
-                    xp_gain = WorldDatabaseManager.exploration_base_xp_get_by_level(area_information.area_level) * xp_rate
+                    xp_gain = WorldDatabaseManager.exploration_base_xp_get_by_level(area_information.level) * xp_rate
                 self.give_xp([xp_gain], notify=False)
             else:
                 xp_gain = 0
@@ -794,6 +794,22 @@ class PlayerManager(UnitManager):
             data = pack('<2I', area_information.zone_id, xp_gain)
             packet = PacketWriter.get_packet(OpCode.SMSG_EXPLORATION_EXPERIENCE, data)
             self.session.enqueue_packet(packet)
+
+    def update_swimming_state(self, state):
+        if state:
+            self.liquid_information = MapManager.get_liquid_information(self.map_, self.location.x, self.location.y)
+            if not self.liquid_information:
+                Logger.warning(f'Unable to retrieve liquid information.')
+        else:
+            self.liquid_information = None
+
+    def is_swimming(self):
+        return self.movement_flags & MoveFlags.MOVEFLAG_SWIMMING
+
+    def is_under_water(self):
+        if self.liquid_information is None or not self.is_swimming():
+            return False
+        return self.location.z + (self.current_scale * 2) < self.liquid_information.height
 
     # override
     def get_full_update_packet(self, is_self=True):
@@ -1257,6 +1273,10 @@ class PlayerManager(UnitManager):
                     self.spirit_release_timer += elapsed
                 else:
                     self.repop()
+
+            # Swimming / Breathing
+            if self.is_alive:
+                self.mirror_timers_manager.update(elapsed)
 
             # Logout timer
             if self.logout_timer > 0:
